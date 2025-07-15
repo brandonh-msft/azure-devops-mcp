@@ -5,12 +5,14 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import * as azdev from "azure-devops-node-api";
 import { AccessToken, DefaultAzureCredential } from "@azure/identity";
 import { configurePrompts } from "./prompts.js";
 import { configureAllTools } from "./tools.js";
 import { UserAgentComposer } from "./useragent.js";
 import { packageVersion } from "./version.js";
+import { randomUUID } from "crypto";
 const args = process.argv.slice(2);
 if (args.length === 0) {
   console.error("Usage: mcp-server-azuredevops <organization_name>");
@@ -51,6 +53,7 @@ async function main() {
   });
 
   const userAgentComposer = new UserAgentComposer(packageVersion);
+
   server.server.oninitialized = () => {
     userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
   };
@@ -59,7 +62,19 @@ async function main() {
 
   configureAllTools(server, getAzureDevOpsToken, getAzureDevOpsClient(userAgentComposer), () => userAgentComposer.userAgent);
 
-  const transport = new StdioServerTransport();
+  const args = process.argv.slice(2);
+  const transportType = args.includes("--transport=http") ? "http" : "stdio";
+
+  let transport;
+  if (transportType === "http") {
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+    });
+  } else {
+    transport = new StdioServerTransport();
+  }
+
   await server.connect(transport);
 }
 
